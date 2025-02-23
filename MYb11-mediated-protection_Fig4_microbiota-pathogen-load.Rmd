@@ -1,0 +1,240 @@
+---
+title: "Nancy's analysis of protection by evolved MYb11 - Melinda Kemlein's MD thesis"
+output: html_notebook
+---
+
+This notebook draws on Melinda Kemlein's data and analysis pipeline archived in Google Drive in July 2021. Within it, I consecutively analyse the different experiments (i.e. pathogen load assay, survival assay, disc diffusion assay) to examine the protective effect of different evolved isolates of MYb11 in C. elegans infected with Bacillus thuringiensis. This study's objectives and methods have been described by MK in the directories where the data is stored (see below).
+
+```{r Set up R sessions}
+# Set working directory
+currentDirectory <- dirname(rstudioapi::getActiveDocumentContext()$path)
+setwd(currentDirectory)
+
+# Load packages
+library(rstudioapi)
+library(readr)
+library(plyr)
+library(ggplot2)
+library(scales)
+library(dplyr)
+library(svglite)
+library(multcomp)
+library(RColorBrewer)
+library(MASS)
+library(fitdistrplus)
+
+```
+
+
+```{r Open and prepare data}
+
+dataPathogenLoad <- as.data.frame(read.csv("MYb11-mediated-protection_Fig4_data_microbiota-pathogen-load_MY316-MYb11-Bt247_final.csv"))
+
+dataPathogenLoad$microbiota <- factor(dataPathogenLoad$microbiota, levels = c("MYb11", "MT5", "MT11", "OP50"))
+dataPathogenLoad$pathogen <- as.factor(dataPathogenLoad$pathogen)
+dataPathogenLoad$repB <- as.factor(dataPathogenLoad$repB)
+dataPathogenLoad$run <- as.factor(dataPathogenLoad$run)
+dataPathogenLoad$proportion_P <- dataPathogenLoad$cfu_pathogen/(dataPathogenLoad$cfu_pathogen + dataPathogenLoad$cfu_microbiota)
+
+```
+
+
+```{r Plot microbiota and pathogen loads}
+
+# Average across technical replicates within biological replicates
+data=ddply(dataPathogenLoad[dataPathogenLoad$pathogen == "Bt247", ],.(run, microbiota, pathogen),function(sub_data)
+{ meanM=mean(sub_data$cfu_microbiota)
+  meanP=mean(sub_data$cfu_pathogen)
+  medianM=median(sub_data$cfu_microbiota)
+  medianP=median(sub_data$cfu_pathogen)
+  meanProp=mean(sub_data$proportion_P)
+  medianProp=median(sub_data$proportion_P)
+  
+  return(data.frame(meanM, meanP, medianM, medianP, meanProp, medianProp))
+  })
+
+data[data$meanM < 0, 'meanM'] <- 0 # Assume no colonization in case of negative CFU value
+
+# Color scheme
+cols <- c("black",brewer.pal(n=9, name= "Spectral")[1:3][3], rev(brewer.pal(n=9, name="Spectral")[7:9])[1],"darkgrey")
+
+# Microbiota colonization in pathogen presence (across runs)
+microbiota_across_runs <- ggplot(data[data$pathogen == "Bt247",], aes(x=microbiota, y=meanM+1, col = microbiota))+ # shift: log-axis
+  geom_hline(yintercept = median(data[data$microbiota == "MYb11", 'meanM']+1), lty = 2, col = "black")+
+  geom_jitter(size = 3, width=0.05, height = 0)+
+  scale_y_log10(labels= trans_format("log10", math_format(10^.x)), limits = c(1,max(dataPathogenLoad$cfu_microbiota)*1.2))+
+  theme_bw()+
+  theme(legend.position= "none")+
+  scale_color_manual(values = cols)+
+  labs(x="Microbiota" , y="Microbiota CFU/worm")+
+  theme_bw()+
+  theme(legend.position = "none",
+        legend.text = element_text(size = 10), 
+        legend.title = element_text(size = 0), 
+        legend.background = element_rect(fill = "transparent"), 
+        axis.text.x = element_text(size = 10), 
+        strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10), 
+        axis.text.y = element_text(hjust = 1, size = 10))
+
+ggsave(microbiota_across_runs, file="pathogenLoad_microbiota_across_runs.svg", units= 'mm', width= 70, height=80, dpi=600)
+
+# Pathogen colonization in microbiota presence (across runs)
+pathogen_across_runs <- ggplot(data, aes(x=microbiota, y=meanP+1, col = microbiota))+
+  geom_hline(yintercept = median(data[data$microbiota == "MYb11", 'meanP'])+1, lty = 2, col = "black")+
+  geom_jitter(size = 3, width=0.05, height = 0)+
+  scale_y_log10(labels= trans_format("log10", math_format(10^.x)), limits = c(1,max(dataPathogenLoad$cfu_microbiota)*1.2))+
+  scale_color_manual(values = cols)+
+  labs(x="Microbiota" , y="Pathogen CFU/worm")+ theme_bw()+
+  theme_bw()+
+  theme(legend.position = "none",
+        legend.text = element_text(size = 10), 
+        legend.title = element_text(size = 0), 
+        legend.background = element_rect(fill = "transparent"), 
+        axis.text.x = element_text(size = 10), 
+        strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10), 
+        axis.text.y = element_text(hjust = 1, size = 10))
+  
+ggsave(pathogen_across_runs, file="pathogenLoad_pathogen_across_runs.svg", units= 'mm', width= 70, height=80, dpi=600)
+
+# Proportion pathogen to overall colonization (across runs)
+pathogenProp_across_runs <- ggplot(data, aes(x=microbiota, y=meanProp, col = microbiota))+
+  geom_hline(yintercept = median(data[data$microbiota == "MYb11", 'meanProp']), lty = 2, col = "black")+
+  geom_jitter(size = 3, width=0.05, height = 0)+
+  scale_y_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1), limits = c(0,1.2))+
+  theme_bw()+
+  theme(legend.position= "none")+
+  labs(x="Microbiota", y="Pathogen proportion")+
+  scale_color_manual(values = cols)+
+    theme_bw()+
+  theme(legend.position = "none",
+        legend.text = element_text(size = 10), 
+        legend.title = element_text(size = 0), 
+        legend.background = element_rect(fill = "transparent"), 
+        axis.text.x = element_text(size = 10), 
+        strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10), 
+        axis.text.y = element_text(hjust = 1, size = 10))
+
+ggsave(pathogenProp_across_runs, file="pathogenLoad_pathogenProp_across_runs.svg", units= 'mm', width= 70, height=80, dpi=600)
+
+# Clean up
+rm(data, microbiota_across_runs, pathogen_across_runs, pathogenProp_across_runs, cols)
+
+```
+
+```{r Statistics}
+data247 <- dataPathogenLoad[dataPathogenLoad$pathogen =="Bt247",]
+
+# 1. Bacterial load (in pathogen presence)
+model <- lm(log10(cfu_microbiota+1) ~ microbiota+run, data = data247)
+anova(model)#summary(model)
+fit <- glht(model, linfct=mcp(microbiota ="Dunnett"))
+summary(fit, test = adjusted("fdr"))
+
+# 2. Pathogen load (in pathogen presence)
+model <- lm(log10(cfu_pathogen+1) ~ microbiota+run, data = data247)
+anova(model)#summary(model)
+fit <- glht(model, linfct=mcp(microbiota ="Dunnett"))
+summary(fit, test = adjusted("fdr"))
+
+# 3. Pathogen proportions (GLM with binomial distribution)
+
+# Check fit of underlying data with different distributions
+normal <- fitdistr(data247[data247$proportion_P <= 1, 'proportion_P'], "normal")
+Poisson <- fitdistr(data247[data247$proportion_P <= 1, 'proportion_P'], "Poisson")
+fitdistr(data247[data247$proportion_P <= 1, 'proportion_P'], "binomial")
+
+binomial <- fitdist(data247[data247$proportion_P <= 1, 'proportion_P'], dist="binom", fix.arg=list(size=3))
+
+AIC(normal)
+AIC(binomial)
+AIC(Poisson)
+
+# Run GLM
+model <- glm(proportion_P ~ microbiota+run, family = "binomial", data = data247[data247$proportion_P <= 1, ])
+summary(model)#summary(model)
+fit <- glht(model, linfct=mcp(microbiota ="Tukey"))
+summary(fit, test = adjusted("fdr"))
+
+```
+
+```{r Supplementary plotting & analyses}
+
+# Microbiota colonization in pathogen presence
+# By run
+microbiota_by_run <- ggplot(dataPathogenLoad, aes(x=microbiota, y=cfu_microbiota+1, col = microbiota))+ # shift cfu by 1 for log plotting
+  geom_boxplot(outlier.colour = "black", outlier.shape = 16, outlier.size = 1, alpha=1/2)+
+  geom_point(aes(color=microbiota), size=2,shape=21, position = position_dodge((width=0.75)))+
+  scale_y_log10(labels= trans_format("log10", math_format(10^.x)))+
+  facet_grid(run~pathogen)+
+  theme_bw()+
+  theme(legend.position= "none")+
+  labs(x="Microbiota isolate" , y="CFU per worm")+
+  scale_color_manual(name="Bacterial isolate",values = cols)
+#ggsave(microbiota_by_run, file="pathogenLoad_microbiota_by_run.svg", units= 'mm', width= 150, height=90, dpi=600)
+
+
+# Pathogen colonization in microbiota presence
+# By run
+pathogen_by_run <- ggplot(dataPathogenLoad, aes(x=microbiota, y=cfu_pathogen+1, col = microbiota))+ # shift cfu by 1 for log plotting
+  geom_boxplot(outlier.colour = "black", outlier.shape = 16, outlier.size = 1, alpha=1/2)+
+  geom_point(aes(color=microbiota), size=2,shape=21, position = position_dodge((width=0.75)))+
+  scale_y_log10(labels= trans_format("log10", math_format(10^.x)))+
+  facet_grid(run~pathogen)+
+  theme_bw()+
+    theme(legend.position= "none")+
+  labs(x="Microbiota isolate" , y="Spores per worm")+
+  scale_color_manual(name="Bacterial isolate",values =cols)
+ggsave(pathogen_by_run, file="pathogenLoad_pathogen_by_run.svg", units= 'mm', width= 150, height=90, dpi=600)
+
+
+# Proportion pathogen to overall colonization
+data <- dataPathogenLoad
+data[data$cfu_microbiota <= 0, 'cfu_microbiota'] <- 1 # Shift to allow log-scale plotting, mind during plotting though!
+data[data$cfu_pathogen <= 0, 'cfu_pathogen'] <- 1
+
+# Within runs
+pathogenProp_within_runs <- ggplot(data, aes(x=microbiota, y=ratio_P_total, col = microbiota))+
+  geom_point(aes(color=microbiota), size=2,shape=21, position = position_dodge((width=0.75)))+
+  geom_boxplot(outlier.colour = "black", outlier.shape = 16, outlier.size = 1, alpha=1/2)+
+  scale_y_continuous(breaks = c(0.25, 0.5, 0.75, 1), limits = c(0,1))+
+  facet_grid(run~pathogen)+
+  theme_bw()+
+  theme(legend.position= "none")+
+  labs(x="Microbiota isolate" , y="Proportion Bt")+
+  scale_color_manual(name="Bacterial isolate",values = cols)
+ggsave(pathogenProp_within_runs, file="pathogenLoad_pathogenProp_within_runs.svg", units= 'mm', width= 150, height=90, dpi=600)
+
+
+data247 <- data[data$pathogen =="Bt247",]
+data407 <- data[data$pathogen =="Bt407",]
+
+
+# 1. Bacterial load (in pathogen presence)
+model <- lm(log10(cfu_microbiota) ~ microbiota/run, data = data247)
+summary(model)
+fit <- glht(model, linfct=mcp(microbiota ="Tukey"))
+summary(fit, test = adjusted("fdr"))
+
+
+# 3. Pathogen proportions
+# Check for differences in Bt proportio using GLM with binomial distribution
+model <- glm(cbind(cfu_pathogen, cfu_microbiota) ~ microbiota/run, family = binomial, data = data247)
+summary(model)
+fit <- glht(model, linfct=mcp(microbiota ="Tukey"))
+summary(fit, test = adjusted("fdr"))
+
+model <- glm(cbind(cfu_pathogen, cfu_microbiota) ~ microbiota/run, family = binomial, data = data407)
+summary(model)
+fit <- glht(model, linfct=mcp(microbiota ="Tukey"))
+summary(fit, test = adjusted("fdr"))
+
+model <- glm(cbind(cfu_pathogen, cfu_microbiota) ~ microbiota/run, family = binomial, data = data407)
+summary(model)
+fit <- glht(model, linfct=mcp(microbiota ="Tukey"))
+summary(fit, test = adjusted("fdr"))
+
+```
+

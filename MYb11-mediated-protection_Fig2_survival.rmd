@@ -1,0 +1,124 @@
+---
+title: "R Notebook - Survival of C. elegans MY316 on B. thuringiensis in the presence of evolved P. lurida MYb11"
+output: html_notebook
+---
+
+```{r Load environment}
+
+# Set working directory to source location
+currentDirectory <- dirname(rstudioapi::getActiveDocumentContext()$path)
+setwd(currentDirectory)
+
+# Load packages
+library(ggplot2)
+library(plyr)
+library(car)
+library(multcomp)
+library("RColorBrewer")
+library(MASS)
+
+```
+
+```{r BT247 - Load & format data}
+
+combi <- read.csv("MYb11-mediated-protection_Fig2_data_survivals_Bt247.csv", sep=";")
+
+stats=ddply(combi,.(bac,lena, exp),function(sub_data)
+{ 
+  mean=mean(sub_data$prop_alive)
+  median=median(sub_data$prop_alive)
+  sd=sd(sub_data$prop_alive)
+  SE=((sd(sub_data$prop_alive))/sqrt(length(sub_data$prop_alive)))
+  return(data.frame(Mean=mean,Median=median,SD=sd,SE))
+  })
+
+stats$lena<-factor(stats$lena,levels=c("1_407_25","2_247_100","3_247_50","4_247_25"))
+stats$exp <- as.factor(stats$exp)
+
+# Focus on first six runs
+stats <- stats[stats$exp%in%c("exp1", "exp2", "exp3", "exp4", "exp5", "exp6"),]
+
+```
+
+
+```{r BT247 - Plot average survival curves across runs}
+
+stats_mean=ddply(combi,.(bac,lena, exp),function(sub_data)
+{ 
+  mean=mean(sub_data$prop_alive)
+  median=median(sub_data$prop_alive)
+  sd=sd(sub_data$prop_alive)
+  SE=((sd(sub_data$prop_alive))/sqrt(length(sub_data$prop_alive)))
+  return(data.frame(Mean=mean,Median=median,SD=sd,SE))
+  })
+
+pop3 <- stats_mean[stats_mean$exp%in%c("exp1","exp2","exp3"), ]
+pop1 <- stats_mean[stats_mean$exp%in%c("exp4","exp5","exp6"), ]
+
+pop1$bac <- factor(pop1$bac, levels = c("MYb11",  "MT2", "MT3", "MT5","OP50"))
+pop3$bac <- factor(pop3$bac, levels = c("MYb11",  "MT11", "MT12", "MT13","OP50"))
+
+surv316Pop1<- ggplot(pop1[!pop1$lena=="1_407_25",],aes(x=lena,y=Mean,color=bac))+
+  stat_summary(aes(y = Mean, group = bac, color=bac), fun.y = mean, geom="line", size=1, lty=3)+
+  geom_point(size=2, alpha=0.7)+
+  geom_jitter(data=pop1[pop1$lena=="1_407_25",], size=2,position=position_dodge(width = .2), alpha=0.7)+
+  labs(x="",y="Survival proportion")+
+  theme_bw()+
+  scale_x_discrete(labels=c("1:25\nBt407","1:100","1:50\nBt247","1:25"))+
+  scale_y_continuous(limits=c(0,1.02))+
+  scale_color_manual(values = c("black", brewer.pal(n=9, name= "Spectral")[1:3], "darkgrey"))+
+  scale_fill_manual(values = c("black", brewer.pal(n=9, name= "Spectral")[1:3], "darkgrey"))+
+  theme(legend.justification = c(0, 0),
+        legend.text = element_text(size = 10), 
+        legend.title = element_text(size = 0), 
+        legend.background = element_rect(fill = "transparent"), 
+        axis.text.x = element_text(size = 10), 
+        strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10), 
+        axis.text.y = element_text(hjust = 1, size = 10), 
+        axis.title = element_text(vjust = 0.3, size = 10,
+                                  face = "bold"))
+
+ggsave("survival_MY316_BT247_MYb11-MTsPop1_average.svg",surv316Pop1, width = 4, height = 2.7)
+
+surv316Pop3<- ggplot(pop3[!pop3$lena=="1_407_25",],aes(x=lena,y=Mean,color=bac))+
+  stat_summary(aes(y = Mean, group = bac, color=bac), fun.y = mean, geom="line", size=1, lty=3)+
+  geom_point(size=2, alpha =.7)+
+  geom_jitter(data=pop3[pop3$lena=="1_407_25",], size=2,position=position_dodge(width = .2), alpha=0.7)+
+  labs(x="",y="Survival proportion")+
+  theme_bw()+
+  scale_x_discrete(labels=c("1:25\nBt407","1:100","1:50\nBt247","1:25"))+
+  scale_y_continuous(limits=c(0,1.02))+
+  scale_color_manual(name="Bacterial isolate",values = c("black", rev(brewer.pal(n=9, name="Spectral")[7:9]),"darkgrey"))+
+  scale_fill_manual(name="Bacterial isolate",values = c("black", rev(brewer.pal(n=9, name= "Spectral")[7:9]),"darkgrey"))+
+  theme(legend.justification = c(0, 0),
+        legend.text = element_text(size = 10), 
+        legend.title = element_text(size = 0), 
+        legend.background = element_rect(fill = "transparent"), 
+        axis.text.x = element_text(size = 10), 
+        strip.text.x = element_text(size = 10), 
+        strip.text.y = element_text(size = 10), 
+        axis.text.y = element_text(hjust = 1, size = 10), 
+        axis.title = element_text(vjust = 0.3, size = 10,
+                                  face = "bold"))
+
+ggsave("survival_MY316_BT247_MYb11-MTsPop3_average.svg", surv316Pop3, width = 4, height = 2.7)
+
+```
+
+```{r BT247 - Compare surival on different isolates across experiment}
+pop3 <- combi[combi$exp%in%c("exp1","exp2","exp3"), ]
+pop3$exp <- as.factor(pop3$exp)
+pop3$lena <- as.factor(pop3$lena)
+pop1 <- combi[combi$exp%in%c("exp4","exp5","exp6"), ]
+pop1$exp <- as.factor(pop1$exp)
+
+pop1$bac <- factor(pop1$bac, levels = c("MYb11",  "MT2", "MT3", "MT5","OP50"))
+pop3$bac <- factor(pop3$bac, levels = c("MYb11",  "MT11", "MT12", "MT13","OP50"))
+
+model_pop3 <- glm(cbind(alive,dead) ~ bac/exp, data = pop3[pop3$infection == "BT247",], family = binomial)
+summary(glht(model_pop3, mcp(bac="Tukey")))
+
+model_pop1 <- glm(cbind(alive,dead) ~ bac/exp, data = pop1[pop1$infection == "BT247",], family = binomial)
+summary(glht(model_pop1, mcp(bac="Tukey")))
+```
