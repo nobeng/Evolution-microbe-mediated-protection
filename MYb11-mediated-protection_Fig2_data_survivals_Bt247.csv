@@ -1,4 +1,4 @@
-id;alive;dead;total;prop_alive;rep;worm;bac;infection;conc;lena;exp;bac2
+id;alive;dead;total;prop_alive;rep;worm;bac;infection;conc;bt_conc_ordered;exp;bac2
 17;19;4;23;0.83;3;my316;MT12;BT247;100;2_247_100;exp1;MT12 (wrinkly)
 17;16;1;17;0.94;2;my316;MT12;BT247;100;2_247_100;exp1;MT12 (wrinkly)
 17;21;0;21;1;1;my316;MT12;BT247;100;2_247_100;exp1;MT12 (wrinkly)
