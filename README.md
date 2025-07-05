@@ -40,8 +40,8 @@ cd Evolution-microbe-mediated-protection
 ## License
 This project is licensed under the Creative Commons Attribution 4.0 International (CC BY 4.0) license.
 
-#Contact
+## Contact
 For questions or further information, please raise a GitHub Issue or Discussion.
 
-#Citation
+## Citation
 If you use this code or data, please cite the associated publication: [Full citation to be added upon publication].
